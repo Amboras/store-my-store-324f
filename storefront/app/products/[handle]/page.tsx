@@ -1,11 +1,11 @@
 import type { Metadata } from 'next'
 import { notFound } from 'next/navigation'
 
-export const revalidate = 3600 // ISR: revalidate every hour
+export const revalidate = 3600
 import { medusaServerClient } from '@/lib/medusa-client'
 import Image from 'next/image'
 import Link from 'next/link'
-import { Truck, RotateCcw, Shield, ChevronRight } from 'lucide-react'
+import { ChevronRight } from 'lucide-react'
 import ProductActions from '@/components/product/product-actions'
 import ProductAccordion from '@/components/product/product-accordion'
 import { ProductViewTracker } from '@/components/product/product-view-tracker'
@@ -68,13 +68,11 @@ export async function generateMetadata({
   const { handle } = await params
   const product = await getProduct(handle)
 
-  if (!product) {
-    return { title: 'Product Not Found' }
-  }
+  if (!product) return { title: 'Product Not Found' }
 
   return {
     title: product.title,
-    description: product.description || `Shop ${product.title}`,
+    description: product.description || `Shop ${product.title} — Thread & Form`,
     openGraph: {
       title: product.title,
       description: product.description || `Shop ${product.title}`,
@@ -91,18 +89,15 @@ export default async function ProductPage({
   const { handle } = await params
   const product = await getProduct(handle)
 
-  if (!product) {
-    notFound()
-  }
+  if (!product) notFound()
 
   const variantExtensions = await getVariantExtensions(product.id)
 
   const allImages = [
     ...(product.thumbnail ? [{ url: product.thumbnail }] : []),
-    ...(product.images || []).filter((img: any) => img.url !== product.thumbnail),
+    ...(product.images || []).filter((img: { url: string }) => img.url !== product.thumbnail),
   ]
 
-  // Use placeholder if no images
   const displayImages = allImages.length > 0
     ? allImages
     : [{ url: getProductPlaceholder(product.id) }]
@@ -110,23 +105,24 @@ export default async function ProductPage({
   return (
     <>
       {/* Breadcrumbs */}
-      <div className="border-b">
+      <div className="border-b bg-[#fafaf9]">
         <div className="container-custom py-3">
-          <nav className="flex items-center gap-2 text-xs text-muted-foreground">
-            <Link href="/" className="hover:text-foreground transition-colors">Home</Link>
+          <nav className="flex items-center gap-2 text-xs text-gray-400">
+            <Link href="/" className="hover:text-[#111827] transition-colors">Home</Link>
             <ChevronRight className="h-3 w-3" />
-            <Link href="/products" className="hover:text-foreground transition-colors">Shop</Link>
+            <Link href="/products" className="hover:text-[#111827] transition-colors">All Shirts</Link>
             <ChevronRight className="h-3 w-3" />
-            <span className="text-foreground">{product.title}</span>
+            <span className="text-[#111827] font-medium">{product.title}</span>
           </nav>
         </div>
       </div>
 
-      <div className="container-custom py-8 lg:py-12">
-        <div className="grid lg:grid-cols-2 gap-10 lg:gap-16">
-          {/* Product Images */}
+      <div className="container-custom py-8 lg:py-14">
+        <div className="grid lg:grid-cols-2 gap-10 lg:gap-20">
+          {/* ── Product Images ── */}
           <div className="space-y-3">
-            <div className="relative aspect-[3/4] overflow-hidden bg-muted rounded-sm">
+            {/* Main Image */}
+            <div className="relative aspect-[3/4] overflow-hidden bg-[#f5f4f0]">
               <Image
                 src={displayImages[0].url}
                 alt={product.title}
@@ -137,16 +133,17 @@ export default async function ProductPage({
               />
             </div>
 
+            {/* Thumbnails */}
             {displayImages.length > 1 && (
               <div className="grid grid-cols-4 gap-3">
-                {displayImages.slice(1, 5).map((image: any, idx: number) => (
+                {displayImages.slice(1, 5).map((image: { url: string }, idx: number) => (
                   <div
                     key={idx}
-                    className="relative aspect-[3/4] overflow-hidden bg-muted rounded-sm"
+                    className="relative aspect-[3/4] overflow-hidden bg-[#f5f4f0]"
                   >
                     <Image
                       src={image.url}
-                      alt={`${product.title} ${idx + 2}`}
+                      alt={`${product.title} — view ${idx + 2}`}
                       fill
                       sizes="12vw"
                       className="object-cover"
@@ -157,46 +154,32 @@ export default async function ProductPage({
             )}
           </div>
 
-          {/* Product Info */}
+          {/* ── Product Info ── */}
           <div className="lg:sticky lg:top-24 lg:self-start space-y-6">
-            {/* Title & Subtitle */}
+            {/* Title */}
             <div>
               {product.subtitle && (
-                <p className="text-sm uppercase tracking-[0.15em] text-muted-foreground mb-2">
+                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#f97316] mb-2">
                   {product.subtitle}
                 </p>
               )}
-              <h1 className="text-h2 font-heading font-semibold">{product.title}</h1>
+              <h1 className="text-3xl lg:text-4xl font-heading font-semibold text-[#111827] leading-tight">
+                {product.title}
+              </h1>
             </div>
 
             <ProductViewTracker
               productId={product.id}
               productTitle={product.title}
               variantId={product.variants?.[0]?.id || null}
-              currency={product.variants?.[0]?.calculated_price?.currency_code || 'usd'}
+              currency={product.variants?.[0]?.calculated_price?.currency_code || 'inr'}
               value={product.variants?.[0]?.calculated_price?.calculated_amount ?? null}
             />
 
-            {/* Variant Selector + Price + Add to Cart (client component) */}
+            {/* Variant Selector + Price + CTA */}
             <ProductActions product={product} variantExtensions={variantExtensions} />
 
-            {/* Trust Signals */}
-            <div className="grid grid-cols-3 gap-4 py-6 border-t">
-              <div className="text-center">
-                <Truck className="h-5 w-5 mx-auto mb-1.5" strokeWidth={1.5} />
-                <p className="text-xs text-muted-foreground">Free Shipping</p>
-              </div>
-              <div className="text-center">
-                <RotateCcw className="h-5 w-5 mx-auto mb-1.5" strokeWidth={1.5} />
-                <p className="text-xs text-muted-foreground">30-Day Returns</p>
-              </div>
-              <div className="text-center">
-                <Shield className="h-5 w-5 mx-auto mb-1.5" strokeWidth={1.5} />
-                <p className="text-xs text-muted-foreground">Secure Checkout</p>
-              </div>
-            </div>
-
-            {/* Accordion Sections */}
+            {/* Accordion */}
             <ProductAccordion
               description={product.description}
               details={product.metadata as Record<string, string> | undefined}

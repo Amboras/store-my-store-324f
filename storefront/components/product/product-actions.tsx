@@ -8,6 +8,9 @@ import ProductPrice, { type VariantExtension } from './product-price'
 import { trackAddToCart } from '@/lib/analytics'
 import { trackMetaEvent, toMetaCurrencyValue } from '@/lib/meta-pixel'
 import type { Product } from '@/types'
+import UrgencyBar from './urgency-bar'
+import BundleOffer from './bundle-offer'
+import TrustBadges from './trust-badges'
 
 interface ProductActionsProps {
   product: Product
@@ -41,7 +44,6 @@ interface ProductOptionWithValues {
   values?: (string | ProductOptionValue)[]
 }
 
-// Helper: extract price amount from calculated_price object
 function getVariantPriceAmount(variant: ProductVariantWithPrice | undefined): number | null {
   const cp = variant?.calculated_price
   if (!cp) return null
@@ -49,17 +51,12 @@ function getVariantPriceAmount(variant: ProductVariantWithPrice | undefined): nu
 }
 
 export default function ProductActions({ product, variantExtensions }: ProductActionsProps) {
-  // Medusa Admin API returns variant.options as VariantOption[] (the `options`
-  // relation expanded), but the SDK's generic ProductVariant type declares it
-  // as Record<string, string>. Cast here so the rest of the component can use
-  // the actual runtime shape.
   const variants = useMemo(
     () => (product.variants || []) as unknown as ProductVariantWithPrice[],
     [product.variants],
   )
   const options = useMemo(() => product.options || [], [product.options])
 
-  // Track selected value per option: { "opt_xxx": "S", "opt_yyy": "Black" }
   const [selectedOptions, setSelectedOptions] = useState<Record<string, string>>(() => {
     const defaults: Record<string, string> = {}
     const firstVariant = variants[0]
@@ -78,10 +75,8 @@ export default function ProductActions({ product, variantExtensions }: ProductAc
   const [justAdded, setJustAdded] = useState(false)
   const { addItem, isAddingItem } = useCart()
 
-  // Find variant matching all selected options
   const selectedVariant = useMemo(() => {
     if (variants.length <= 1) return variants[0]
-
     return variants.find((v: ProductVariantWithPrice) => {
       if (!v.options) return false
       return v.options.every((opt: VariantOption) => {
@@ -92,11 +87,10 @@ export default function ProductActions({ product, variantExtensions }: ProductAc
     }) || variants[0]
   }, [variants, selectedOptions])
 
-  // Extension data for selected variant (compare-at + inventory)
   const ext = selectedVariant?.id ? variantExtensions?.[selectedVariant.id] : null
   const currentPriceCents = getVariantPriceAmount(selectedVariant)
   const cp = selectedVariant?.calculated_price
-  const currency = (cp && typeof cp !== 'number' ? cp.currency_code : undefined) || 'usd'
+  const currency = (cp && typeof cp !== 'number' ? cp.currency_code : undefined) || 'inr'
 
   const manageInventory = ext?.manage_inventory ?? false
   const inventoryQuantity = ext?.inventory_quantity
@@ -137,7 +131,6 @@ export default function ProductActions({ product, variantExtensions }: ProductAc
     )
   }
 
-  // Should we show variant selectors?
   const hasMultipleVariants = variants.length > 1
 
   return (
@@ -151,14 +144,18 @@ export default function ProductActions({ product, variantExtensions }: ProductAc
         size="detail"
       />
 
+      {/* Urgency */}
+      <UrgencyBar
+        inventoryQuantity={inventoryQuantity}
+        manageInventory={manageInventory}
+      />
+
       {/* Option Selectors */}
       {hasMultipleVariants && options.map((option: ProductOptionWithValues) => {
-        // option.values is an array of { id, value, ... } objects
         const values = (option.values || []).map((v: string | ProductOptionValue) =>
           typeof v === 'string' ? v : v.value
         ).filter(Boolean) as string[]
 
-        // Skip if only "One Size" or "Default"
         if (values.length <= 1 && (values[0] === 'One Size' || values[0] === 'Default')) {
           return null
         }
@@ -168,10 +165,10 @@ export default function ProductActions({ product, variantExtensions }: ProductAc
 
         return (
           <div key={optionId}>
-            <h3 className="text-xs uppercase tracking-widest font-semibold mb-3">
+            <h3 className="text-xs uppercase tracking-widest font-bold text-[#111827] mb-3">
               {option.title}
               {selectedValue && (
-                <span className="ml-2 normal-case tracking-normal font-normal text-muted-foreground">
+                <span className="ml-2 normal-case tracking-normal font-normal text-gray-400">
                   — {selectedValue}
                 </span>
               )}
@@ -180,7 +177,6 @@ export default function ProductActions({ product, variantExtensions }: ProductAc
               {values.map((value) => {
                 const isSelected = selectedValue === value
 
-                // Check availability: is there a variant with this option value that's in stock?
                 const isAvailable = variants.some((v: ProductVariantWithPrice) => {
                   const hasValue = v.options?.some(
                     (o: VariantOption) => (o.option_id === optionId || o.option?.id === optionId) && o.value === value
@@ -196,12 +192,12 @@ export default function ProductActions({ product, variantExtensions }: ProductAc
                     key={value}
                     onClick={() => handleOptionChange(optionId, value)}
                     disabled={!isAvailable}
-                    className={`min-w-[48px] px-4 py-2.5 text-sm border transition-all ${
+                    className={`min-w-[48px] px-4 py-2.5 text-sm transition-all font-medium ${
                       isSelected
-                        ? 'border-foreground bg-foreground text-background'
+                        ? 'border-2 border-[#111827] bg-[#111827] text-white'
                         : isAvailable
-                        ? 'border-border hover:border-foreground'
-                        : 'border-border text-muted-foreground/40 line-through cursor-not-allowed'
+                        ? 'border-2 border-gray-200 hover:border-[#111827] text-[#111827]'
+                        : 'border-2 border-gray-100 text-gray-300 line-through cursor-not-allowed'
                     }`}
                   >
                     {value}
@@ -214,27 +210,30 @@ export default function ProductActions({ product, variantExtensions }: ProductAc
       })}
 
       {/* Low Stock Warning */}
-      {isLowStock && (
-        <p className="text-sm text-accent font-medium">
-          Only {inventoryQuantity} left in stock
-        </p>
+      {isLowStock && inventoryQuantity != null && (
+        <div className="flex items-center gap-2">
+          <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
+          <p className="text-sm font-semibold text-red-600">
+            Only {inventoryQuantity} left in stock — order soon
+          </p>
+        </div>
       )}
 
       {/* Quantity + Add to Cart */}
       <div className="flex gap-3">
-        <div className="flex items-center border">
+        <div className="flex items-center border-2 border-gray-200">
           <button
             onClick={() => setQuantity(Math.max(1, quantity - 1))}
-            className="p-3 hover:bg-muted transition-colors"
+            className="p-3 hover:bg-gray-50 transition-colors"
             disabled={quantity <= 1}
             aria-label="Decrease quantity"
           >
             <Minus className="h-4 w-4" />
           </button>
-          <span className="w-12 text-center text-sm font-medium tabular-nums">{quantity}</span>
+          <span className="w-12 text-center text-sm font-bold tabular-nums">{quantity}</span>
           <button
             onClick={() => setQuantity(quantity + 1)}
-            className="p-3 hover:bg-muted transition-colors"
+            className="p-3 hover:bg-gray-50 transition-colors"
             disabled={isOutOfStock || (inventoryQuantity != null && quantity >= inventoryQuantity)}
             aria-label="Increase quantity"
           >
@@ -245,12 +244,12 @@ export default function ProductActions({ product, variantExtensions }: ProductAc
         <button
           onClick={handleAddToCart}
           disabled={isOutOfStock || isAddingItem}
-          className={`flex-1 flex items-center justify-center gap-2 py-3.5 text-sm font-semibold uppercase tracking-wide transition-all ${
+          className={`flex-1 flex items-center justify-center gap-2 py-3.5 text-sm font-bold uppercase tracking-widest transition-all ${
             isOutOfStock
-              ? 'bg-muted text-muted-foreground cursor-not-allowed'
+              ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
               : justAdded
-              ? 'bg-green-700 text-white'
-              : 'bg-foreground text-background hover:opacity-90'
+              ? 'bg-green-600 text-white'
+              : 'bg-[#111827] text-white hover:bg-[#1f2937]'
           }`}
         >
           {isAddingItem ? (
@@ -267,6 +266,17 @@ export default function ProductActions({ product, variantExtensions }: ProductAc
           )}
         </button>
       </div>
+
+      {/* Bundle Offer */}
+      <BundleOffer
+        product={product as Parameters<typeof BundleOffer>[0]['product']}
+        selectedVariantId={selectedVariant?.id}
+        selectedVariantPrice={currentPriceCents}
+        currency={currency}
+      />
+
+      {/* Trust Badges */}
+      <TrustBadges />
     </div>
   )
 }
